@@ -17,7 +17,9 @@ Simple tool for ARP poisoning attack I made for fun. Invalidates the arp cache o
     Target IP: 192.168.22.100                             Target IP: 192.168.22.101   
     Target MAC: ff:ff:ff:ff:ff:ff (Broadcast)             Target MAC: 10:10:20:00:00:00
 	
-Now HOST will forward all packet to 30:30:30:00:00:00. If needed, we can also perform man-in-the-middle attack by forwarding ARP packet to required HOST 192.168.22.100 and poison it too. 
+Now HOST will forward all packet to 30:30:30:00:00:00. If needed, we can also perform 
+man-in-the-middle attack by forwarding ARP packet to required HOST 192.168.22.100 
+and poison it too. 
 		 
 ```
 
