@@ -3,7 +3,6 @@
 #define TCPPROXY_H
 
 #include <stdint.h>
-#include <stdlib.h>
 #include <pcap.h>
 
 #include <libnet/libnet-macros.h>
@@ -28,6 +27,8 @@ typedef struct tcp_action_s {
     uint16_t new_src_port;  // 0 = don't change
     uint32_t new_dst_ip;    // 0 = don't change
     uint16_t new_dst_port;  // 0 = don't change
+    /// On Windows forwarding to local is different
+    uint8_t is_loopback;
 } tcp_action_t;
 
 /// Full rule for TCP packet, if packet match rule `tcp_match_t`, we will change headers to ones
@@ -58,6 +59,8 @@ void tcp_proxy_destroy(tcp_proxy_t *p);
  * @param h Pcap packet info
  * @param pkt Packet data
  * @param len Packet size
+ *
+ * TCP data handler callback
  */
 void on_tcp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t len);
 
