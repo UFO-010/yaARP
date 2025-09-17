@@ -27,8 +27,8 @@ typedef struct {
 typedef struct connection {
     /// Conection parameters we will use to find connection
     addr_pair_t orig;
-    /// localhost connection
-    int server_fd;
+    /// localhost connection client
+    int downstream_fd;
     conn_state_t state;
     struct connection *next;
 } connection_t;
@@ -135,6 +135,49 @@ void tcp_proxy_add_rule(tcp_proxy_t *p, tcp_rule_t *r) {
     p->rules = nr;
 }
 
+/*-----------------------------------TEST ONLY-----------------------------------*/
+void test_tcp_info_print(
+    uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport, const tcp_action_t *act) {
+    char source_buf[INET_ADDRSTRLEN];
+    struct in_addr source_addr;
+    source_addr.s_addr = sip;
+    inet_ntop(AF_INET, &source_addr, source_buf, sizeof(source_buf));
+
+    char dest_buf[INET_ADDRSTRLEN];
+    struct in_addr dest_addr;
+    dest_addr.s_addr = dip;
+    inet_ntop(AF_INET, &dest_addr, dest_buf, sizeof(dest_buf));
+
+    printf(
+        "source IP %s\n"
+        "source port %d\n"
+        "destination IP %s\n"
+        "destination port %d\n\n",
+        source_buf, sport, dest_buf, dport);
+
+    char act_source_buf[INET_ADDRSTRLEN];
+    struct in_addr act_source_addr;
+    act_source_addr.s_addr = act->new_src_ip;
+    inet_ntop(AF_INET, &act_source_addr, act_source_buf, sizeof(act_source_buf));
+
+    char act_dest_buf[INET_ADDRSTRLEN];
+    struct in_addr act_dest_addr;
+    act_dest_addr.s_addr = act->new_dst_ip;
+    inet_ntop(AF_INET, &act_dest_addr, act_dest_buf, sizeof(act_dest_buf));
+
+    printf(
+        "Performing rule\n\n"
+        "source IP %s\n"
+        "source port %d\n"
+        "destination IP %s\n"
+        "destination port %d\n\n",
+        act_source_buf, act->new_src_port, act_dest_buf, act->new_dst_port);
+
+    printf("----------------------------\n\n");
+}
+
+/*-------------------------------------------------------------------------------*/
+
 void on_tcp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t len) {
     tcp_proxy_t *p = ctx;
 
@@ -171,42 +214,7 @@ void on_tcp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t le
     printf("Good packet, transmit\n\n");
 
     /*---------------------------------TEST---------------------------------*/
-    char source_buf[INET_ADDRSTRLEN];
-    struct in_addr source_addr;
-    source_addr.s_addr = sip;
-    inet_ntop(AF_INET, &source_addr, source_buf, sizeof(source_buf));
-
-    char dest_buf[INET_ADDRSTRLEN];
-    struct in_addr dest_addr;
-    dest_addr.s_addr = dip;
-    inet_ntop(AF_INET, &dest_addr, dest_buf, sizeof(dest_buf));
-
-    printf(
-        "source IP %s\n"
-        "source port %d\n"
-        "destination IP %s\n"
-        "destination port %d\n\n",
-        source_buf, sport, dest_buf, dport);
-
-    char act_source_buf[INET_ADDRSTRLEN];
-    struct in_addr act_source_addr;
-    act_source_addr.s_addr = act.new_src_ip;
-    inet_ntop(AF_INET, &act_source_addr, act_source_buf, sizeof(act_source_buf));
-
-    char act_dest_buf[INET_ADDRSTRLEN];
-    struct in_addr act_dest_addr;
-    act_dest_addr.s_addr = act.new_dst_ip;
-    inet_ntop(AF_INET, &act_dest_addr, act_dest_buf, sizeof(act_dest_buf));
-
-    printf(
-        "Performing rule\n\n"
-        "source IP %s\n"
-        "source port %d\n"
-        "destination IP %s\n"
-        "destination port %d\n\n",
-        act_source_buf, act.new_src_port, act_dest_buf, act.new_dst_port);
-
-    printf("----------------------------\n\n");
+    test_tcp_info_print(sip, dip, sport, dport, &act);
     /*----------------------------------------------------------------------*/
 
     // Should be Windows-only
@@ -226,9 +234,9 @@ void on_tcp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t le
             c->orig.src_port = act.new_src_port;
             c->orig.dst_ip = act.new_dst_ip;
             c->orig.dst_port = act.new_dst_port;
-            c->server_fd = connect_to_local(act.new_dst_ip, act.new_dst_port);
+            c->downstream_fd = connect_to_local(act.new_dst_ip, act.new_dst_port);
 
-            if (!c->server_fd) {
+            if (!c->downstream_fd) {
                 free(c);
                 return;
             }
@@ -252,11 +260,11 @@ void on_tcp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t le
     const u_char *payload = pkt + payload_off;
 
     // Send to localhost server
-    send(c->server_fd, payload, payload_len, 0);
+    send(c->downstream_fd, payload, payload_len, 0);
 
     // Cleanup on FIN/CLOSE
     if (tcp->th_flags & (TH_FIN | TH_RST)) {
-        close(c->server_fd);
+        close(c->downstream_fd);
         remove_connection(p, c);
     }
 }
@@ -346,9 +354,9 @@ static connection_t *create_connection(tcp_proxy_t *p,
     c->orig.src_port = orig_src_port;
     c->orig.dst_ip = orig_dst_ip;
     c->orig.dst_port = orig_dst_port;
-    c->server_fd = connect_to_local(orig_dst_ip, orig_dst_port);
+    c->downstream_fd = connect_to_local(orig_dst_ip, orig_dst_port);
 
-    if (!c->server_fd) {
+    if (!c->downstream_fd) {
         free(c);
         return NULL;
     }
