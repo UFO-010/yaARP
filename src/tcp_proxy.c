@@ -14,15 +14,19 @@ typedef enum { FORWARD_TYPE_LIBNET, FORWARD_TYPE_SOCKET_CLIENT } forward_type_t;
 
 typedef enum { CONN_NEW, CONN_ESTABLISHED, CONN_CLOSED } conn_state_t;
 
+typedef struct {
+    uint32_t src_ip;
+    uint16_t src_port;
+    uint32_t dst_ip;
+    uint16_t dst_port;
+} addr_pair_t;
+
 /// On Windows we have to use sockets to forward data to localhost. If we capture SYN, we will
 /// establish new connection with localhost, if we capture FIN, we will drop connection. Connections
 /// is searched via parameters.
 typedef struct connection {
     /// Conection parameters we will use to find connection
-    uint32_t orig_src_ip;
-    uint16_t orig_src_port;
-    uint32_t orig_dst_ip;
-    uint16_t orig_dst_port;
+    addr_pair_t orig;
     /// localhost connection
     int server_fd;
     conn_state_t state;
@@ -47,6 +51,17 @@ struct tcp_proxy_s {
 
 static int connect_to_local(uint32_t ip, uint16_t port);
 
+int is_addr_loopback(struct in_addr *addr);
+
+int is_ifname_loopback(const char *ifname);
+
+static connection_t *create_connection(tcp_proxy_t *p,
+                                       tcp_rule_t *rule,
+                                       uint32_t orig_src_ip,
+                                       uint16_t orig_src_port,
+                                       uint32_t orig_dst_ip,
+                                       uint16_t orig_dst_port);
+static void add_connection(tcp_proxy_t *p, connection_t *c);
 connection_t *find_connection(connection_t *conn,
                               uint32_t orig_src_ip,
                               uint16_t orig_src_port,
@@ -80,14 +95,17 @@ tcp_proxy_t *tcp_proxy_create(const char *capture_ifname,
 
     p->capture_ctx = capture_ctx;
 
-    libnet_t *forward_ctx = libnet_init(LIBNET_LINK, forward_ifname, errbuf);
-    if (forward_ctx == NULL) {
-        libnet_destroy(p->capture_ctx);
-        free(p);
-        return NULL;
+    if (is_ifname_loopback(forward_ifname) == 0) {
+        libnet_t *forward_ctx = libnet_init(LIBNET_LINK, forward_ifname, errbuf);
+        if (forward_ctx == NULL) {
+            libnet_destroy(p->capture_ctx);
+            free(p);
+            return NULL;
+        }
+        p->capture_ctx = forward_ctx;
+    } else {
+        p->capture_ctx = NULL;
     }
-
-    p->capture_ctx = forward_ctx;
 
     memmove(p->capture_mac, hw, ETHER_ADDR_LEN);
 
@@ -110,6 +128,9 @@ void tcp_proxy_destroy(tcp_proxy_t *p) {
 void tcp_proxy_add_rule(tcp_proxy_t *p, tcp_rule_t *r) {
     tcp_rule_t *nr = malloc(sizeof(*nr));
     memmove(nr, r, sizeof(*nr));
+    struct in_addr dst_addr;
+    dst_addr.s_addr = r->action.new_dst_ip;
+    nr->action.is_loopback = is_addr_loopback(&dst_addr);
     nr->next = p->rules;
     p->rules = nr;
 }
@@ -201,10 +222,10 @@ void on_tcp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t le
         // Establish connection to localhost server
         if (tcp->th_flags & TH_SYN) {
             c = calloc(1, sizeof(*c));
-            c->orig_src_ip = act.new_src_ip;
-            c->orig_src_port = act.new_src_port;
-            c->orig_dst_ip = act.new_dst_ip;
-            c->orig_dst_port = act.new_dst_port;
+            c->orig.src_ip = act.new_src_ip;
+            c->orig.src_port = act.new_src_port;
+            c->orig.dst_ip = act.new_dst_ip;
+            c->orig.dst_port = act.new_dst_port;
             c->server_fd = connect_to_local(act.new_dst_ip, act.new_dst_port);
 
             if (!c->server_fd) {
@@ -214,8 +235,7 @@ void on_tcp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t le
 
             c->state = CONN_ESTABLISHED;
 
-            c->next = p->conn_list;
-            p->conn_list = c;
+            add_connection(p, c);
         } else {
             return;
         }
@@ -315,14 +335,52 @@ int connect_to_local(uint32_t ip, uint16_t port) {
     return fd;
 }
 
+static connection_t *create_connection(tcp_proxy_t *p,
+                                       tcp_rule_t *rule,
+                                       uint32_t orig_src_ip,
+                                       uint16_t orig_src_port,
+                                       uint32_t orig_dst_ip,
+                                       uint16_t orig_dst_port) {
+    connection_t *c = calloc(1, sizeof(*c));
+    c->orig.src_ip = orig_src_ip;
+    c->orig.src_port = orig_src_port;
+    c->orig.dst_ip = orig_dst_ip;
+    c->orig.dst_port = orig_dst_port;
+    c->server_fd = connect_to_local(orig_dst_ip, orig_dst_port);
+
+    if (!c->server_fd) {
+        free(c);
+        return NULL;
+    }
+
+    c->state = CONN_ESTABLISHED;
+
+    add_connection(p, c);
+
+    return c;
+}
+
+void add_connection(tcp_proxy_t *p, connection_t *c) {
+    if (p == NULL || c == NULL) {
+        return;
+    }
+
+    c->next = p->conn_list;
+    p->conn_list = c;
+}
+
 connection_t *find_connection(connection_t *conn,
                               uint32_t orig_src_ip,
                               uint16_t orig_src_port,
                               uint32_t orig_dst_ip,
                               uint16_t orig_dst_port) {
+    if (conn == NULL) {
+        return NULL;
+    }
+
     for (connection_t *t = conn; t != NULL; t = conn->next) {
-        if (conn->orig_src_ip == orig_src_ip && conn->orig_src_port == orig_src_port &&
-            conn->orig_dst_ip == orig_dst_ip && conn->orig_dst_port == orig_dst_port) {
+        if (conn->orig.src_ip == orig_src_ip && conn->orig.src_port == orig_src_port &&
+            conn->orig.dst_ip == orig_dst_ip && conn->orig.dst_port == orig_dst_port) {
             return t;
         }
     }
@@ -336,13 +394,50 @@ void remove_connection(const tcp_proxy_t *p, connection_t *c) {
     }
 
     for (connection_t *t = p->conn_list; t != NULL; t = p->conn_list->next) {
-        if (t->orig_src_ip == c->orig_src_ip && t->orig_src_port == c->orig_src_port &&
-            t->orig_dst_ip == c->orig_dst_ip && t->orig_dst_port == c->orig_dst_port) {
+        if (t->orig.src_ip == c->orig.src_ip && t->orig.src_port == c->orig.src_port &&
+            t->orig.dst_ip == c->orig.dst_ip && t->orig.dst_port == c->orig.dst_port) {
             t->next = c->next;
             free(c);
             return;
         }
     }
+}
+
+/**
+ * @brief is_addr_loopback
+ * @param addr
+ * @return 1 if loopback, 0 otherwise
+ */
+int is_addr_loopback(struct in_addr *addr) {
+    if (addr->S_un.S_addr == 0x0100007F) {
+        return 1;
+    }
+    return 0;
+}
+
+/**
+ * @brief is_ifname_loopback
+ * @param ifname
+ * @return 1 if loopback, 0 otherwise
+ */
+int is_ifname_loopback(const char *ifname) {
+    if (ifname == NULL) {
+        return 0;
+    }
+
+    if (strstr(ifname, "loopback") != NULL) {
+        return 1;
+    }
+
+    if (strstr(ifname, "Loopback") != NULL) {
+        return 1;
+    }
+
+    if (strstr(ifname, "localhost") != NULL) {
+        return 1;
+    }
+
+    return 0;
 }
 
 #ifdef _Post_invalid_
