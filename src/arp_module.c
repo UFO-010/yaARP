@@ -68,6 +68,8 @@ void on_arp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t le
            m->hw_addr[2], m->hw_addr[3], m->hw_addr[4], m->hw_addr[5]);
     printf("--------------------\n\n");
     /*-----------------------------------------------------------------------------------*/
+    // Clear libnet context
+    libnet_clear_packet(m->arp_ctx);
 
     libnet_build_arp(ARPHRD_ETHER,    // Hardware type
                      ETHERTYPE_IP,    // Protocol type

@@ -2,7 +2,7 @@
 
 #include "packet_processor.h"
 #include "arp_module.h"
-#include "tcp_proxy.h"
+#include "tcp_module.h"
 
 #ifndef _Post_invalid_
     #define _Post_invalid_
@@ -92,7 +92,7 @@ int main() {
     }
 
     const char *lo = get_pcap_name(lo_iface);
-    tcp_proxy_t *tcp = tcp_proxy_create(name, mac, lo, errbuf);
+    tcp_module_t *tcp = tcp_module_create(name, mac, /*lo,*/ errbuf);
     if (tcp == nullptr) {
         std::cerr << errbuf << std::endl;
         return -1;
@@ -102,31 +102,31 @@ int main() {
     pp_register_handler(pp, ETHERTYPE_IP, on_tcp, tcp);
 
     /*---------------------------TEST---------------------------*/
-    /* Rules to proxy TCP packets
+    /* Rules to forward TCP packets
      * 1. If send from 192.168.22.101 to 192.168.22.100 change sender IP to network adapter address
-     * we use to capture and destination IP to localhost
-     * 2. If send from localhost to our adapter change sender IP to 192.168.22.100 and destination
+     * we use to capture and destination IP to our capture adapter
+     * 2. If send to our adapter change sender IP to 192.168.22.100 and destination
      * IP to 192.168.22.101
      */
     tcp_rule_t rule1 = (tcp_rule_t){
         .match = {inet_addr("192.168.22.101"), 0, inet_addr("192.168.22.100"), mqtt_port},
-        .action = {inet_addr(get_ipv4_addr(iface)), 0, inet_addr("127.0.0.1"), mqtt_port},
+        .action = {inet_addr("192.168.22.101"), 0, inet_addr(get_ipv4_addr(iface)), mqtt_port},
         .next = nullptr};
 
     tcp_rule_t rule2 = (tcp_rule_t){
-        .match = {inet_addr("127.0.0.1"), mqtt_port, inet_addr(get_ipv4_addr(iface)), 0},
+        .match = {inet_addr(get_ipv4_addr(iface)), mqtt_port, inet_addr("192.168.22.101"), 0},
         .action = {inet_addr("192.168.22.100"), mqtt_port, inet_addr("192.168.22.101"), 0},
         .next = nullptr};
 
-    tcp_proxy_add_rule(tcp, &rule1);
-    tcp_proxy_add_rule(tcp, &rule2);
+    tcp_module_add_rule(tcp, &rule1);
+    tcp_module_add_rule(tcp, &rule2);
     /*----------------------------------------------------------*/
 
     pp_start(pp, "arp or tcp");
 
     pp_destroy(pp);
     arp_module_destroy(arp);
-    tcp_proxy_destroy(tcp);
+    tcp_module_destroy(tcp);
 
     iface_list_free(lst);
 

@@ -21,16 +21,18 @@ set(SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/src/adapter_info.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/resolve_win_names.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/packet_processor.c"
-    "${CMAKE_CURRENT_LIST_DIR}/src/tcp_proxy.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/tcp_module.c"
     "${CMAKE_CURRENT_LIST_DIR}/src/arp_module.c"
+    "${CMAKE_CURRENT_LIST_DIR}/src/tcp_proxy.c"
 )
 
 set(HEADERS
     "${CMAKE_CURRENT_LIST_DIR}/include/adapter_info.h"
     "${CMAKE_CURRENT_LIST_DIR}/include/resolve_win_names.h"
     "${CMAKE_CURRENT_LIST_DIR}/include/packet_processor.h"
-    "${CMAKE_CURRENT_LIST_DIR}/include/tcp_proxy.h"
+    "${CMAKE_CURRENT_LIST_DIR}/include/tcp_module.h"
     "${CMAKE_CURRENT_LIST_DIR}/include/arp_module.h"
+    "${CMAKE_CURRENT_LIST_DIR}/include/tcp_proxy.h"
 )
 
 add_library(${PROJECT_NAME} STATIC ${SOURCES} ${HEADERS})
