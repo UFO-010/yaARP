@@ -133,8 +133,9 @@ void on_tcp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t le
     }
 
     const struct libnet_ipv4_hdr *ip = (void *)(pkt + sizeof(*eth));
-    size_t ip_hdrlen = ip->ip_hl * 4llu;
-    const struct libnet_tcp_hdr *tcp = (void *)(pkt + sizeof(*eth) + ip_hdrlen);
+    size_t ip_hdr_len = ip->ip_hl * 4llu;
+    const struct libnet_tcp_hdr *tcp = (void *)(pkt + sizeof(*eth) + ip_hdr_len);
+    size_t tcp_hdr_len = tcp->th_off * 4llu;
 
     uint32_t sip = ip->ip_src.s_addr;
     uint32_t dip = ip->ip_dst.s_addr;
@@ -154,27 +155,74 @@ void on_tcp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t le
     /*---------------------------------TEST---------------------------------*/
     test_tcp_info_print(sip, dip, sport, dport, &act);
     /*----------------------------------------------------------------------*/
+
+    // Extract TCP payload
+    size_t payload_off = sizeof(*eth) + ip_hdr_len + tcp_hdr_len;
+    size_t payload_len = (len > payload_off) ? len - payload_off : 0;
+    const u_char *payload = pkt + payload_off;
+
+    size_t tcp_base_hdr_len = sizeof(struct libnet_tcp_hdr);
+    size_t tcp_opts_len = 0;
+    const u_char *tcp_opts_ptr = NULL;
+    if (tcp_hdr_len > tcp_base_hdr_len) {
+        tcp_opts_len = tcp_hdr_len - tcp_base_hdr_len;
+        tcp_opts_ptr = (const u_char *)tcp + tcp_base_hdr_len;
+    }
+
+    // Calculate total TCP segment length
+    size_t tcp_total_len = tcp_hdr_len + payload_len;
+
     // Clear libnet context
     libnet_clear_packet(p->capture_ctx);
 
-    // Extract TCP payload
-    size_t ip_hdr_len = ip->ip_hl << 2;
-    size_t tcp_hdr_len = tcp->th_off << 2;
-    size_t payload_off = sizeof(*eth) + ip_hdr_len + tcp_hdr_len;
-    if (payload_off >= len) {
-        return;  // no data
+    if (tcp_opts_len > 0 && tcp_opts_ptr != NULL) {
+        libnet_build_tcp_options(tcp_opts_ptr,    // TCP options
+                                 tcp_opts_len,    //  TCP options length
+                                 p->capture_ctx,  // libnet context
+                                 0                // ptag
+        );
     }
-    size_t payload_len = len - payload_off;
-    const u_char *payload = pkt + payload_off;
 
-    libnet_build_tcp(htons(act.new_dst_port), htons(act.new_src_port), tcp->th_seq, tcp->th_ack,
-                     tcp->th_flags, tcp->th_win, 0, 0, 0, payload, payload_len, p->capture_ctx, 0);
+    libnet_build_tcp(act.new_src_port,    // src port (host order)
+                     act.new_dst_port,    // dst port (host order)
+                     tcp->th_seq,         // seq (network order)
+                     tcp->th_ack,         // ack (network order)
+                     tcp->th_flags,       // flags
+                     ntohs(tcp->th_win),  // window (host order)
+                     0,                   // checksum (0 = auto)
+                     0,                   // urgent ptr
+                     tcp_total_len,       // TCP length
+                     payload,             // payload pointer
+                     payload_len,         // payload length
+                     p->capture_ctx,      // libnet context
+                     0                    // ptag
+    );
 
-    libnet_build_ipv4(0, ip->ip_tos, ip->ip_id, ip->ip_off, ip->ip_ttl, IPPROTO_TCP, 0,
-                      act.new_src_ip, act.new_dst_ip, NULL, 0, p->capture_ctx, 0);
+    uint16_t total_len = ip_hdr_len + tcp_hdr_len;  // should be 44, not 50
 
-    libnet_build_ethernet(p->capture_mac, eth->ether_shost, ETHERTYPE_IP, NULL, 0, p->capture_ctx,
-                          0);
+    libnet_build_ipv4(total_len,          // total length (host order)
+                      ip->ip_tos,         // TOS
+                      ntohs(ip->ip_id),   // ID (host order)
+                      ntohs(ip->ip_off),  // frag & flags (host order)
+                      ip->ip_ttl,         // TTL
+                      IPPROTO_TCP,        // protocol
+                      0,                  // checksum (0 = auto)
+                      act.new_src_ip,     // src IP (network order)
+                      act.new_dst_ip,     // dst IP (network order)
+                      NULL,               // payload (added in TCP)
+                      0,                  // payload length
+                      p->capture_ctx,     // libnet context
+                      0                   // ptag
+    );
+
+    libnet_build_ethernet(p->capture_mac,    // dst MAC
+                          eth->ether_shost,  // src MAC
+                          ETHERTYPE_IP,      // type
+                          NULL,              // payload
+                          0,                 // payload length
+                          p->capture_ctx,    // libnet context
+                          0                  // ptag
+    );
 
     uint32_t packet_size = libnet_write(p->capture_ctx);
     if (packet_size == -1) {
