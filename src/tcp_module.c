@@ -7,6 +7,9 @@
 #include <libnet.h>
 #include <libnet/libnet-headers.h>
 
+// Will be used later with central packet forwarding logic
+typedef enum { FORWARD_TYPE_LIBNET, FORWARD_TYPE_SOCKET_CLIENT } forward_type_t;
+
 /// Main context to proxy data
 struct tcp_module_s {
     /// Proxy rule

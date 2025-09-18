@@ -5,8 +5,6 @@
 #include <stdint.h>
 #include <pcap.h>
 
-#include <libnet/libnet-macros.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif

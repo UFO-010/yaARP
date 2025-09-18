@@ -10,8 +10,6 @@
 
 #include "tcp_proxy.h"
 
-typedef enum { FORWARD_TYPE_LIBNET, FORWARD_TYPE_SOCKET_CLIENT } forward_type_t;
-
 typedef enum { CONN_NEW, CONN_ESTABLISHED, CONN_CLOSED } conn_state_t;
 
 typedef struct {
