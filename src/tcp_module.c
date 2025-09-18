@@ -115,7 +115,16 @@ void test_tcp_info_print(
 }
 
 /*-------------------------------------------------------------------------------*/
-
+/**
+ * @brief on_tcp
+ * @param ctx `tcp_module_t` pointer
+ * @param h pcap packet info
+ * @param pkt pcap packet data
+ * @param len pcap packet length
+ *
+ * Captures TCP packet. Checks IP and TCP headers, if packet match one of the rules, change headers
+ * according to rule and inject packet on the same adapter we capture data.
+ */
 void on_tcp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t len) {
     tcp_module_t *p = ctx;
 
@@ -185,7 +194,7 @@ void on_tcp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t le
 
     libnet_build_tcp(act.new_src_port,    // src port (host order)
                      act.new_dst_port,    // dst port (host order)
-                     tcp->th_seq,         // seq (network order)
+                     htonl(tcp->th_seq),  // seq (network order)
                      tcp->th_ack,         // ack (network order)
                      tcp->th_flags,       // flags
                      ntohs(tcp->th_win),  // window (host order)
@@ -230,7 +239,7 @@ void on_tcp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t le
     }
 }
 
-/**,
+/**
  * @brief check_and_apply
  * @param p main TCP handler
  * @param sip source IP
