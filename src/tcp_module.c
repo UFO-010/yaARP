@@ -16,8 +16,6 @@ struct tcp_module_s {
     /// Network adapter MAC address we use to perform packet capture
     uint8_t capture_mac[ETHER_ADDR_LEN];
     /// MAC address we use to perform packet injection
-    uint8_t forwar_mac[ETHER_ADDR_LEN];
-    /// Connections we use to forward data to Windows localhost
 };
 
 int is_ifname_loopback(const char *ifname);
@@ -86,6 +84,9 @@ void test_tcp_info_print(
     dest_addr.s_addr = dip;
     inet_ntop(AF_INET, &dest_addr, dest_buf, sizeof(dest_buf));
 
+    printf("---------TCP packet---------\n");
+    printf("Good packet, transmit\n\n");
+
     printf(
         "source IP %s\n"
         "source port %d\n"
@@ -151,15 +152,13 @@ void on_tcp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t le
     uint16_t sport = ntohs(tcp->th_sport);
     uint16_t dport = ntohs(tcp->th_dport);
 
-    printf("---------TCP packet---------\n");
-
     tcp_action_t act;
     if (check_and_apply(p, sip, sport, dip, dport, &act) == -1) {
+        printf("---------TCP packet---------\n");
         printf("Rule not found, dropping package\n");
         printf("----------------------------\n\n");
         return;
     }
-    printf("Good packet, transmit\n\n");
 
     /*---------------------------------TEST---------------------------------*/
     test_tcp_info_print(sip, dip, sport, dport, &act);
