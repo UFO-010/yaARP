@@ -12,7 +12,25 @@ extern "C" {
 
 typedef struct arp_module_s arp_module_t;
 
+/**
+ * @brief arp_module_create
+ * @param device network adapter name
+ * @param hw network adapter MAC
+ * @param errbuf
+ * @return NULL on error
+ *
+ * @todo consider getting mac address from network adapter by name
+ *
+ * Creating module for arp response injections on desired network adapter with its mac.
+ */
 arp_module_t *arp_module_create(const char *device, const uint8_t hw[ETHER_ADDR_LEN], char *errbuf);
+
+/**
+ * @brief arp_module_destroy
+ * @param m
+ *
+ * Frees memory
+ */
 void arp_module_destroy(arp_module_t *m);
 
 /**

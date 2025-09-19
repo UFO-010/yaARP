@@ -223,7 +223,7 @@ void on_tcp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t le
                       NULL,               // payload (added in TCP)
                       0,                  // payload length
                       p->capture_ctx,     // libnet context
-                      0                   // ptag
+                      0                   // libnet ptag
     );
 
     libnet_build_ethernet(p->capture_mac,    // dst MAC
@@ -232,7 +232,7 @@ void on_tcp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t le
                           NULL,              // payload
                           0,                 // payload length
                           p->capture_ctx,    // libnet context
-                          0                  // ptag
+                          0                  // libnet ptag
     );
 
     uint32_t packet_size = libnet_write(p->capture_ctx);

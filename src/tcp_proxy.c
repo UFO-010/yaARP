@@ -21,11 +21,15 @@ typedef struct {
 
 /// On Windows we have to use sockets to forward data to localhost. If we capture SYN, we will
 /// establish new connection with localhost, if we capture FIN, we will drop connection. Connections
-/// is searched via parameters.
+/// is searched via parameters. When we forward data to adapter, server sock will get data and copy
+/// it to client sock that will transmit data to localhost server. Client socket will copy data to
+/// adapter server
 typedef struct connection {
     /// Conection parameters we will use to find connection
     addr_pair_t orig;
-    /// localhost connection client
+    /// adapter server sock
+    int upstream_fd;
+    /// localhost connection client socket
     int downstream_fd;
     conn_state_t state;
     struct connection *next;

@@ -18,6 +18,38 @@ struct arp_module_s {
     libnet_t *arp_ctx;
 };
 
+/*----------------------------------TEST ONLY---------------------------------------------*/
+void test_arp_info_print(const uint8_t *arp_sha,
+                         const uint8_t *arp_spa,
+                         const uint8_t *arp_tha,
+                         const uint8_t *arp_tpa,
+                         const uint8_t *hw_addr) {
+    printf("----- ARPOP_REQUEST -----\n");
+
+    printf("Sender MAC : %02x:%02x:%02x:%02x:%02x:%02x\n", arp_sha[0], arp_sha[1], arp_sha[2],
+           arp_sha[3], arp_sha[4], arp_sha[5]);
+
+    printf("Sender IP : %d.%d.%d.%d\n", arp_spa[0], arp_spa[1], arp_spa[2], arp_spa[3]);
+
+    printf("Target MAC : %02x:%02x:%02x:%02x:%02x:%02x (00:00:00:00:00:00)\n", arp_tha[0],
+           arp_tha[1], arp_tha[2], arp_tha[3], arp_tha[4], arp_tha[5]);
+
+    printf("Target IP: %d.%d.%d.%d\n", arp_tpa[0], arp_tpa[1], arp_tpa[2], arp_tpa[3]);
+
+    printf("Desired MAC : %02x:%02x:%02x:%02x:%02x:%02x\n", hw_addr[0], hw_addr[1], hw_addr[2],
+           hw_addr[3], hw_addr[4], hw_addr[5]);
+    printf("--------------------\n\n");
+}
+
+/*----------------------------------------------------------------------------------------*/
+
+/**
+ * @brief on_arp
+ * @param ctx
+ * @param h
+ * @param pkt
+ * @param len
+ */
 void on_arp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t len) {
     arp_module_t *m = ctx;
 
@@ -42,7 +74,6 @@ void on_arp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t le
     if (arp_type != ARPOP_REQUEST) {
         return;
     }
-    printf("----- ARPOP_REQUEST -----\n");
 
     const uint8_t *arp_data = (const uint8_t *)(arp + 1);
     const uint8_t *arp_sha = arp_data;                                            // Sender MAC
@@ -50,24 +81,10 @@ void on_arp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t le
     const uint8_t *arp_tha = arp_data + arp->ar_hln + arp->ar_pln;                // Target MAC
     const uint8_t *arp_tpa = arp_data + arp->ar_hln + arp->ar_hln + arp->ar_pln;  // Target IP
 
-    /*----------------------------------TEST---------------------------------------------*/
+    /*-------------------------------TEST-------------------------------*/
+    test_arp_info_print(arp_sha, arp_spa, arp_tha, arp_tpa, m->hw_addr);
+    /*------------------------------------------------------------------*/
 
-    printf("----- ARPOP_REQUEST -----\n");
-
-    printf("Sender MAC : %02x:%02x:%02x:%02x:%02x:%02x\n", arp_sha[0], arp_sha[1], arp_sha[2],
-           arp_sha[3], arp_sha[4], arp_sha[5]);
-
-    printf("Sender IP : %d.%d.%d.%d\n", arp_spa[0], arp_spa[1], arp_spa[2], arp_spa[3]);
-
-    printf("Target MAC : %02x:%02x:%02x:%02x:%02x:%02x (00:00:00:00:00:00)\n", arp_tha[0],
-           arp_tha[1], arp_tha[2], arp_tha[3], arp_tha[4], arp_tha[5]);
-
-    printf("Target IP: %d.%d.%d.%d\n", arp_tpa[0], arp_tpa[1], arp_tpa[2], arp_tpa[3]);
-
-    printf("Desired MAC : %02x:%02x:%02x:%02x:%02x:%02x\n", m->hw_addr[0], m->hw_addr[1],
-           m->hw_addr[2], m->hw_addr[3], m->hw_addr[4], m->hw_addr[5]);
-    printf("--------------------\n\n");
-    /*-----------------------------------------------------------------------------------*/
     // Clear libnet context
     libnet_clear_packet(m->arp_ctx);
 
@@ -83,7 +100,7 @@ void on_arp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t le
                      NULL,            // Payload
                      0,               // Payload size
                      m->arp_ctx,      // libnet handle
-                     0                // libnet id
+                     0                // libnet ptag
     );
 
     libnet_build_ethernet(arp_sha,        // Destination MAC
@@ -92,7 +109,7 @@ void on_arp(void *ctx, const struct pcap_pkthdr *h, const u_char *pkt, size_t le
                           NULL,           // Payload
                           0,              // Payload size
                           m->arp_ctx,     // libnet handle
-                          0               // libnet id
+                          0               // libnet ptag
     );
 
     uint32_t packet_size = libnet_write(m->arp_ctx);
